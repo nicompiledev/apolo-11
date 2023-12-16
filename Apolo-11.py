@@ -23,10 +23,9 @@ class Apollo11Simulation:
     def generate_random_data(self, mission):
         data = {
             "date": datetime.now().strftime("%d%m%y%H%M%S"),
-            # "mission": mission,
-            "mission": random.choice(self.missions),
-            "device_type": random.choice(self.device_types),
-            "device_status": random.choice(self.device_states),
+            "mission": mission if mission != "UNKN" else f"UNKNOWN-{datetime.now().strftime('%d%m%y%H%M%S')}",
+            "device_type": "unknown",
+            "device_status": "unknown",
             "hash": None,
         }
 
