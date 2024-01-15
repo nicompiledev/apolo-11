@@ -246,7 +246,7 @@ class Apollo11Simulation:
 
 
 if __name__ == "__main__":
-    simulation_path: str = "/home/atlanticsoft/my_repos/apolo_11"
+    simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
 
     while True:
