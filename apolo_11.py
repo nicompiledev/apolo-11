@@ -7,6 +7,7 @@ import os
 import random
 from datetime import datetime
 import time
+import logging
 import pandas as pd
 
 
@@ -39,6 +40,19 @@ class Apollo11Simulation:
             "unknown",
         ]
         self.simulation_data: List[Dict[str, Union[str, int, None]]] = []
+
+        # Add logging configuration
+        logging.basicConfig(
+            filename=os.path.join(simulation_folder, "simulation.log"),
+            level=logging.DEBUG,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+        )
+
+        # Add a StreamHandler to log to the console
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+        logging.getLogger().addHandler(console_handler)
 
     def generate_random_data(
         self, mission: str, file_number: int
@@ -103,32 +117,40 @@ class Apollo11Simulation:
 
     def simulate(self, num_files_range: Tuple[int, int] = (1, 100)) -> None:
         """
-        Run the simulation.
+        Simulates the mission by generating random data files and performing necessary operations.
 
-        Args: \
-            num_files_range (tuple, optional): Range of number of files to simulate. \
-                                       Defaults to (1, 100).
-        """
+        Args:
+            num_files_range (Tuple[int, int], optional): Range of the number of files
+                                                         to be generated for each mission.
+                                                         Defaults (1, 100).
 
-        devices_folder = os.path.join(self.simulation_folder, "devices")
-        os.makedirs(devices_folder, exist_ok=True)
+        Returns:
+            None"""
 
-        print("Simulation is running...")
+        try:
+            devices_folder = os.path.join(self.simulation_folder, "devices")
+            os.makedirs(devices_folder, exist_ok=True)
 
-        for mission in self.missions:
-            num_files = random.randint(num_files_range[0], num_files_range[1])
+            logging.info("Simulation is running...")
 
-            for i in range(1, num_files + 1):
-                data = self.generate_random_data(mission, i)
-                filename = os.path.join(devices_folder, data["filename"])
+            for mission in self.missions:
+                num_files = random.randint(num_files_range[0], num_files_range[1])
 
-                with open(filename, "w", encoding="utf-8") as file:
-                    file.write(str(data))
-                    self.simulation_data.append(data)
+                for i in range(1, num_files + 1):
+                    data = self.generate_random_data(mission, i)
+                    filename = os.path.join(devices_folder, data["filename"])
 
-        self.generate_file_list_report()
-        self.generate_reports()
-        self.move_files_to_backup()
+                    with open(filename, "w", encoding="utf-8") as file:
+                        file.write(str(data))
+                        self.simulation_data.append(data)
+
+            logging.info("Simulation completed successfully.")
+            self.generate_file_list_report()
+            self.generate_reports()
+            self.move_files_to_backup()
+
+        except (FileNotFoundError, PermissionError) as e:
+            logging.error("An error occurred during simulation: %s", str(e))
 
     def move_files_to_backup(self) -> None:
         """
