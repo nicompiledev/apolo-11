@@ -7,6 +7,7 @@ import os
 import random
 from datetime import datetime
 import time
+import shutil
 import logging
 import pandas as pd
 
@@ -55,7 +56,7 @@ class Apollo11Simulation:
         logging.getLogger().addHandler(console_handler)
 
     def generate_random_data(
-        self, mission: str, file_number: int
+        self, file_number: int
     ) -> Dict[str, Union[str, int, None]]:
         """
         Generate random simulation data.
@@ -67,6 +68,8 @@ class Apollo11Simulation:
         Returns:
             dict: Randomly generated simulation data.
         """
+        mission = random.choice(self.missions)
+
         data: Dict[str, Union[str, int, None]] = {
             "date": datetime.now().strftime("%d%m%y%H%M%S"),
             "mission": mission
@@ -133,38 +136,46 @@ class Apollo11Simulation:
 
             logging.info("Simulation is running...")
 
-            for mission in self.missions:
-                num_files = random.randint(num_files_range[0], num_files_range[1])
+            total_files_to_generate = random.randint(
+                num_files_range[0], num_files_range[1]
+            )
+
+            total_files_to_generate_log = total_files_to_generate
+
+            files_created_counter = 0
+
+            while total_files_to_generate > 0:
+                num_files = min(
+                    total_files_to_generate,
+                    random.randint(num_files_range[0], num_files_range[1]),
+                )
 
                 for i in range(1, num_files + 1):
-                    data = self.generate_random_data(mission, i)
+                    data = self.generate_random_data(i)
                     filename = os.path.join(devices_folder, data["filename"])
 
                     with open(filename, "w", encoding="utf-8") as file:
                         file.write(str(data))
                         self.simulation_data.append(data)
 
-            logging.info("Simulation completed successfully.")
+                    total_files_to_generate -= 1
+                    files_created_counter += 1
+
+            logging.debug(
+                "Files created in 'devices' folder: %d", files_created_counter
+            )
+            logging.info(
+                "Total files generated in this simulation: %d",
+                total_files_to_generate_log,
+            )
+
             self.generate_file_list_report()
             self.generate_reports()
             self.move_files_to_backup()
+            logging.info("Simulation completed successfully.")
 
         except (FileNotFoundError, PermissionError) as e:
             logging.error("An error occurred during simulation: %s", str(e))
-
-    def move_files_to_backup(self) -> None:
-        """
-        Move files to backup folder.
-        """
-        backup_folder = os.path.join(self.simulation_folder, "backups")
-        os.makedirs(backup_folder, exist_ok=True)
-
-        devices_folder = os.path.join(self.simulation_folder, "devices")
-        os.makedirs(devices_folder, exist_ok=True)
-
-        for file in os.listdir(devices_folder):
-            file_path = os.path.join(devices_folder, file)
-            os.rename(file_path, os.path.join(backup_folder, file))
 
     def analyze_events(self) -> None:
         """
@@ -259,18 +270,52 @@ class Apollo11Simulation:
         """
         Generate all the required reports.
         """
-        self.analyze_events()
-        self.manage_disconnections()
-        self.consolidate_missions()
-        self.calculate_percentages()
+        try:
+            self.analyze_events()
+            self.manage_disconnections()
+            self.consolidate_missions()
+            self.calculate_percentages()
+            self.generate_file_list_report()
+
+            logging.info("Reports generated successfully.")
+        except (FileNotFoundError, PermissionError, pd.errors.EmptyDataError) as e:
+            logging.error("Error generating reports: %s", str(e))
 
         self.simulation_data = []
+
+    def move_files_to_backup(self) -> None:
+        """
+        Move files to backup folder.
+        """
+        backup_folder = os.path.join(self.simulation_folder, "backups")
+        os.makedirs(backup_folder, exist_ok=True)
+
+        devices_folder = os.path.join(self.simulation_folder, "devices")
+
+        files_before_move = os.listdir(devices_folder)
+
+        for file in os.listdir(devices_folder):
+            file_path = os.path.join(devices_folder, file)
+            backup_path = os.path.join(backup_folder, file)
+
+            try:
+                shutil.move(file_path, backup_path)
+            except OSError as e:
+                logging.error("Error moving file %s to backups: %s", file, str(e))
+            else:
+                logging.debug("Moved file %s to backups", file)
+
+        files_after_move = os.listdir(devices_folder)
+
+        files_moved_count = len(files_before_move) - len(files_after_move)
+
+        logging.info("Moved %d files from 'devices' to 'backups'", files_moved_count)
 
 
 if __name__ == "__main__":
     simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
-
+    # apollo_11_simulation.simulate()
     while True:
         apollo_11_simulation.simulate()
         time.sleep(20)
