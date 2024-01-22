@@ -9,6 +9,7 @@ from datetime import datetime
 import time
 import shutil
 import logging
+import yaml
 import pandas as pd
 
 
@@ -17,7 +18,9 @@ class Apollo11Simulation:
     Class representing the Apollo 11 simulation.
     """
 
-    def __init__(self, simulation_folder: str) -> None:
+    def __init__(
+        self, simulation_folder: str, config_path: str = "config/config.yml"
+    ) -> None:
         """
         Initialize the Apollo11Simulation object.
 
@@ -42,14 +45,21 @@ class Apollo11Simulation:
         ]
         self.simulation_data: List[Dict[str, Union[str, int, None]]] = []
 
-        # Add logging configuration
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            config_data = yaml.safe_load(config_file)
+
+        self.timesleep = config_data.get("timesleep")
+        self.num_files_range = (
+            config_data.get("num_files_range", {}).get("min", 1),
+            config_data.get("num_files_range", {}).get("max", 100),
+        )
+
         logging.basicConfig(
             filename=os.path.join(simulation_folder, "simulation.log"),
             level=logging.DEBUG,
             format="%(asctime)s - %(levelname)s - %(message)s",
         )
 
-        # Add a StreamHandler to log to the console
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
@@ -315,7 +325,9 @@ class Apollo11Simulation:
 if __name__ == "__main__":
     simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
-    # apollo_11_simulation.simulate()
+
     while True:
-        apollo_11_simulation.simulate()
-        time.sleep(20)
+        apollo_11_simulation.simulate(
+            num_files_range=apollo_11_simulation.num_files_range
+        )
+        time.sleep(apollo_11_simulation.timesleep)
