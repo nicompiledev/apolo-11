@@ -431,30 +431,49 @@ class DashboardWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("Apollo 11 Simulation Dashboard")
-        self.setGeometry(100, 100, 1000, 600)
+        self.setGeometry(
+            100, 100, 1200, 800
+        )  # Adjusted window size for better visibility
+
+        self.description_label = QLabel(
+            "This Python project simulates the generation of data and reports for the Apollo 11 mission. "
+            "The simulation generates random data files, analyzes events, manages disconnections, consolidates "
+            "missions, calculates percentages, generates reports, and moves files to a backup folder.",
+            self,
+        )
+        self.description_label.setWordWrap(True)
 
         self.label_simulation = QLabel("Initializing simulation...", self)
 
         self.log_group_box = QGroupBox("Log", self)
         self.log_text_edit = QTextEdit(self.log_group_box)
         self.log_text_edit.setReadOnly(True)
-        self.log_text_edit.setMaximumWidth(600)
+        self.log_text_edit.setMinimumHeight(
+            200
+        )  # Adjusted minimum height for better visibility
+        self.log_text_edit.setMaximumWidth(
+            800
+        )  # Adjusted maximum width for better visibility
 
         self.reports_group_box = QGroupBox("Reports", self)
         self.reports_text_edit = QTextEdit(self.reports_group_box)
         self.reports_text_edit.setReadOnly(True)
-        self.reports_text_edit.setMaximumWidth(500)
+        self.reports_text_edit.setMinimumHeight(
+            200
+        )  # Adjusted minimum height for better visibility
+        self.reports_text_edit.setMaximumWidth(
+            800
+        )  # Adjusted maximum width for better visibility
 
         self.show_reports_button = QPushButton("Show Reports", self)
-        self.show_reports_button.setFixedWidth(150)  # O puedes usar setMaximumWidth
-        self.show_reports_button.clicked.connect(self.show_reports)
+        self.show_reports_button.setFixedWidth(150)
 
         self.footer_label = QLabel(
             'Copyright © 2024 <a href="https://github.com/nicompiledev/apolo-11">@nicompiledev</a> and company. All rights reserved.<br>'
             "This project was funded by SoftServe through the #CodingUpMyFuture Python Bootcamp 2023.",
             self,
         )
-        self.footer_label.setAlignment(Qt.AlignCenter)  # Nueva línea
+        self.footer_label.setAlignment(Qt.AlignCenter)
         self.footer_label.setOpenExternalLinks(True)
 
         self.layout = QVBoxLayout(self)
@@ -468,6 +487,7 @@ class DashboardWindow(QWidget):
         hbox_layout.addWidget(self.log_group_box)
         hbox_layout.addWidget(self.reports_group_box)
 
+        self.layout.addWidget(self.description_label)
         self.layout.addWidget(self.label_simulation)
         self.layout.addLayout(hbox_layout)
         self.layout.addWidget(self.footer_label)
@@ -553,7 +573,6 @@ class DashboardWindow(QWidget):
 
         try:
             for file in os.listdir(reports_folder):
-                file_path = os.path.join(reports_folder, file)
                 reports_contents += f"{os.path.basename(file)}\n"
         except FileNotFoundError:
             return "Reports folder not found."
