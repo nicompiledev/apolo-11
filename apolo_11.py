@@ -1,6 +1,7 @@
 """
 Module that simulates the generation of data and reports for the Apollo 11 mission.
 """
+
 from typing import List, Dict, Tuple, Union
 
 import os
@@ -9,6 +10,22 @@ from datetime import datetime
 import time
 import shutil
 import logging
+import sys
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QMutex, QMutexLocker, QUrl, Qt
+from PyQt5.QtWidgets import (
+    QApplication,
+    QWidget,
+    QGridLayout,
+    QSizePolicy,
+    QHBoxLayout,
+    QVBoxLayout,
+    QGroupBox,
+    QLabel,
+    QTextEdit,
+    QPushButton,
+    QFileDialog,
+)
 import yaml
 import pandas as pd
 
@@ -44,6 +61,8 @@ class Apollo11Simulation:
             "unknown",
         ]
         self.simulation_data: List[Dict[str, Union[str, int, None]]] = []
+
+        self.simulation_data_mutex = QMutex()
 
         with open(config_path, "r", encoding="utf-8") as config_file:
             config_data = yaml.safe_load(config_file)
@@ -123,8 +142,11 @@ class Apollo11Simulation:
         Returns:
             str: Report filename.
         """
+        reports_folder = os.path.join(self.simulation_folder, "reports")
+        os.makedirs(reports_folder, exist_ok=True)
+
         return os.path.join(
-            self.simulation_folder,
+            reports_folder,
             f"APLSTATS-{report_type}-{datetime.now().strftime('%d%m%y%H%M%S')}.csv",
         )
 
@@ -166,6 +188,9 @@ class Apollo11Simulation:
 
                     with open(filename, "w", encoding="utf-8") as file:
                         file.write(str(data))
+                        self.simulation_data.append(data)
+
+                    with QMutexLocker(self.simulation_data_mutex):
                         self.simulation_data.append(data)
 
                     total_files_to_generate -= 1
@@ -321,13 +346,256 @@ class Apollo11Simulation:
 
         logging.info("Moved %d files from 'devices' to 'backups'", files_moved_count)
 
+    def get_simulation_data_copy(self):
+        """
+        Returns a copy of the simulation data.
+
+        Returns:
+            dict: A copy of the simulation data.
+        """
+        with QMutexLocker(self.simulation_data_mutex):
+            return self.simulation_data.copy()
+
+
+class SimulationThread(QThread):
+    """
+    A QThread subclass for running the Apollo simulation in a separate thread.
+
+    This class provides a mechanism to execute the Apollo simulation without blocking the main application thread.
+    It handles the execution of the simulation and emits a signal when the simulation is completed.
+
+    Attributes:
+        simulation_completed (pyqtSignal): A signal emitted when the simulation has finished.
+    """
+
+    simulation_completed = pyqtSignal()
+
+    def __init__(self, apollo_simulation):
+        """
+        Initializes a SimulationThread object.
+
+        Parameters:
+            apollo_simulation (ApolloSimulation): The ApolloSimulation object used for the simulation.
+
+        Returns:
+            None
+        """
+        super().__init__()
+        self.apollo_simulation = apollo_simulation
+
+    def run(self):
+        """
+        Runs the Apollo simulation.
+
+        This method initiates the Apollo simulation by calling the `simulate` method of the `apollo_simulation` object.
+        It also emits a signal `simulation_completed` when the simulation is completed.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
+        self.apollo_simulation.simulate(
+            num_files_range=self.apollo_simulation.num_files_range
+        )
+        self.simulation_completed.emit()
+
+
+class DashboardWindow(QWidget):
+    """
+    Represents the main window of the Apollo 11 Simulation Dashboard.
+
+    Args:
+        apollo_simulation (ApolloSimulation): The ApolloSimulation object used for the simulation.
+
+    Attributes:
+        label_simulation (QLabel): The label widget for displaying simulation status.
+        log_group_box (QGroupBox): The group box widget for log records.
+        log_text_edit (QTextEdit): The text edit widget for displaying log records.
+        reports_group_box (QGroupBox): The group box widget for reports.
+        reports_text_edit (QTextEdit): The text edit widget for displaying reports.
+        show_reports_button (QPushButton): The button widget for showing reports.
+        footer_label (QLabel): The label widget for displaying the footer information.
+        layout (QVBoxLayout): The main layout of the window.
+        simulation_thread (SimulationThread): The thread for running the simulation.
+        timer (QTimer): The timer for starting the simulation.
+        mutex_for_labels (QMutex): The mutex for thread-safe access to labels.
+
+    Signals:
+        simulation_completed: Signal emitted when the simulation is completed.
+
+    """
+
+    def __init__(self, apollo_simulation):
+        super().__init__()
+
+        self.setWindowTitle("Apollo 11 Simulation Dashboard")
+        self.setGeometry(100, 100, 1000, 600)
+
+        self.label_simulation = QLabel("Initializing simulation...", self)
+
+        self.log_group_box = QGroupBox("Log", self)
+        self.log_text_edit = QTextEdit(self.log_group_box)
+        self.log_text_edit.setReadOnly(True)
+        self.log_text_edit.setMaximumWidth(600)
+
+        self.reports_group_box = QGroupBox("Reports", self)
+        self.reports_text_edit = QTextEdit(self.reports_group_box)
+        self.reports_text_edit.setReadOnly(True)
+        self.reports_text_edit.setMaximumWidth(500)
+
+        self.show_reports_button = QPushButton("Show Reports", self)
+        self.show_reports_button.setFixedWidth(150)  # O puedes usar setMaximumWidth
+        self.show_reports_button.clicked.connect(self.show_reports)
+
+        self.footer_label = QLabel(
+            'Copyright © 2024 <a href="https://github.com/nicompiledev/apolo-11">@nicompiledev</a> and company. All rights reserved.<br>'
+            "This project was funded by SoftServe through the #CodingUpMyFuture Python Bootcamp 2023.",
+            self,
+        )
+        self.footer_label.setAlignment(Qt.AlignCenter)  # Nueva línea
+        self.footer_label.setOpenExternalLinks(True)
+
+        self.layout = QVBoxLayout(self)
+
+        hbox_layout = QHBoxLayout()
+
+        reports_layout = QVBoxLayout(self.reports_group_box)
+        reports_layout.addWidget(self.reports_text_edit)
+        reports_layout.addWidget(self.show_reports_button)
+
+        hbox_layout.addWidget(self.log_group_box)
+        hbox_layout.addWidget(self.reports_group_box)
+
+        self.layout.addWidget(self.label_simulation)
+        self.layout.addLayout(hbox_layout)
+        self.layout.addWidget(self.footer_label)
+
+        log_layout = QVBoxLayout(self.log_group_box)
+        log_layout.addWidget(self.log_text_edit)
+
+        self.apollo_simulation = apollo_simulation
+
+        self.simulation_thread = SimulationThread(apollo_simulation)
+        self.simulation_thread.simulation_completed.connect(self.update_labels)
+        self.simulation_thread.finished.connect(self.simulation_finished)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.start_simulation)
+        self.timer.start(apollo_simulation.timesleep * 1000)
+
+        self.show()
+
+        self.mutex_for_labels = QMutex()
+
+    def start_simulation(self):
+        """
+        Starts the simulation by initializing the simulation thread and updating the simulation label.
+        """
+        print("Simulating...")
+        self.label_simulation.setText("Generating files and reports...")
+        self.simulation_thread.start()
+
+    def update_labels(self):
+        """
+        Updates the labels with the simulation data after the simulation is completed.
+        """
+        with QMutexLocker(self.mutex_for_labels):
+            simulation_data_copy = self.apollo_simulation.get_simulation_data_copy()
+
+            print(f"Files Generated: {len(simulation_data_copy)}")
+            print(
+                f"Reports Generated: {len(set(data['filename'] for data in simulation_data_copy))}"
+            )
+            print("Simulation completed")
+
+    def simulation_finished(self):
+        """
+        Performs actions after the simulation is finished, such as updating labels, displaying log records, and displaying reports.
+        """
+        print("Simulation finished")
+        self.update_labels()
+
+        log_contents = self.read_log_file()
+        self.log_text_edit.setPlainText(log_contents)
+
+        reports_contents = self.read_reports_files()
+        self.reports_text_edit.setPlainText(reports_contents)
+
+    def read_log_file(self):
+        """
+        Reads the log file and returns its contents.
+
+        Returns:
+            str: The contents of the log file.
+        """
+        log_file_path = os.path.join(
+            self.apollo_simulation.simulation_folder, "simulation.log"
+        )
+        try:
+            with open(log_file_path, "r", encoding="utf-8") as log_file:
+                return log_file.read()
+        except FileNotFoundError:
+            return "Log file not found."
+
+    def read_reports_files(self):
+        """
+        Reads the reports files and returns their contents.
+
+        Returns:
+            str: The contents of the reports files.
+        """
+        reports_folder = os.path.join(
+            self.apollo_simulation.simulation_folder, "reports"
+        )
+        reports_contents = ""
+
+        try:
+            for file in os.listdir(reports_folder):
+                file_path = os.path.join(reports_folder, file)
+                reports_contents += f"{os.path.basename(file)}\n"
+        except FileNotFoundError:
+            return "Reports folder not found."
+
+        return reports_contents
+
+    def show_reports(self):
+        """
+        Shows the file dialog for selecting report files and displays the selected files in the reports text edit.
+        """
+        reports_folder = os.path.join(
+            self.apollo_simulation.simulation_folder, "reports"
+        )
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+
+        file_dialog = QFileDialog(self)
+        file_dialog.setDirectory(reports_folder)
+        file_dialog.setWindowTitle("Select Report Files")
+        file_dialog.setFileMode(QFileDialog.ExistingFiles)
+        file_dialog.setNameFilter(
+            "CSV files (*.csv);;Text files (*.txt);;All files (*)"
+        )
+        file_dialog.setOptions(options)
+
+        if file_dialog.exec_():
+            selected_files = file_dialog.selectedFiles()
+
+            reports_contents = "\n".join(
+                os.path.basename(file) for file in selected_files
+            )
+
+            self.reports_text_edit.setPlainText(reports_contents)
+
+            for file_path in selected_files:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+
 
 if __name__ == "__main__":
     simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
 
-    while True:
-        apollo_11_simulation.simulate(
-            num_files_range=apollo_11_simulation.num_files_range
-        )
-        time.sleep(apollo_11_simulation.timesleep)
+    app = QApplication(sys.argv)
+    dashboard = DashboardWindow(apollo_11_simulation)
+    sys.exit(app.exec_())
