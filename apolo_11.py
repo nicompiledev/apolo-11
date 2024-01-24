@@ -11,7 +11,7 @@ import time
 import shutil
 import logging
 import sys
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtGui import QDesktopServices, QColor
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QMutex, QMutexLocker, QUrl, Qt
 from PyQt5.QtWidgets import (
     QApplication,
@@ -405,38 +405,62 @@ class SimulationThread(QThread):
 class DashboardWindow(QWidget):
     """
     Represents the main window of the Apollo 11 Simulation Dashboard.
-
-    Args:
-        apollo_simulation (ApolloSimulation): The ApolloSimulation object used for the simulation.
-
-    Attributes:
-        label_simulation (QLabel): The label widget for displaying simulation status.
-        log_group_box (QGroupBox): The group box widget for log records.
-        log_text_edit (QTextEdit): The text edit widget for displaying log records.
-        reports_group_box (QGroupBox): The group box widget for reports.
-        reports_text_edit (QTextEdit): The text edit widget for displaying reports.
-        show_reports_button (QPushButton): The button widget for showing reports.
-        footer_label (QLabel): The label widget for displaying the footer information.
-        layout (QVBoxLayout): The main layout of the window.
-        simulation_thread (SimulationThread): The thread for running the simulation.
-        timer (QTimer): The timer for starting the simulation.
-        mutex_for_labels (QMutex): The mutex for thread-safe access to labels.
-
-    Signals:
-        simulation_completed: Signal emitted when the simulation is completed.
-
     """
 
     def __init__(self, apollo_simulation):
         super().__init__()
 
+        primary_color = QColor(33, 150, 243)  # Blue
+        secondary_color = QColor(255, 150, 0)  # Orange
+        background_color = QColor(38, 50, 56)  # Dark Gray
+
+        self.setStyleSheet(
+            """
+            QWidget {
+                background-color: %s;
+                color: %s;
+            }
+            QLabel {
+                color: %s;
+            }
+            QPushButton {
+                background-color: %s;
+                color: white;
+                border: none;
+                padding: 8px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: %s;
+            }
+            QGroupBox {
+                border: 2px solid %s;
+                border-radius: 15px;
+                margin-top: 10px;
+            }
+            QTextEdit {
+                background-color: white;
+                border: 2px solid %s;
+            }
+            """
+            % (
+                background_color.name(),
+                primary_color.name(),
+                primary_color.name(),
+                secondary_color.name(),
+                secondary_color.lighter(110).name(),
+                primary_color.name(),
+                primary_color.name(),
+            )
+        )
+
         self.setWindowTitle("Apollo 11 Simulation Dashboard")
-        self.setGeometry(
-            100, 100, 1200, 800
-        )  # Adjusted window size for better visibility
+        self.setGeometry(100, 100, 1200, 800)
+
+        self.setStyleSheet("background-color: #001f3f; color: white;")
 
         self.description_label = QLabel(
-            "This Python project simulates the generation of data and reports for the Apollo 11 mission. "
+            "This Python project simulates the generation of data and reports for the Apollo 11 mission.\n"
             "The simulation generates random data files, analyzes events, manages disconnections, consolidates "
             "missions, calculates percentages, generates reports, and moves files to a backup folder.",
             self,
@@ -448,28 +472,24 @@ class DashboardWindow(QWidget):
         self.log_group_box = QGroupBox("Log", self)
         self.log_text_edit = QTextEdit(self.log_group_box)
         self.log_text_edit.setReadOnly(True)
-        self.log_text_edit.setMinimumHeight(
-            200
-        )  # Adjusted minimum height for better visibility
-        self.log_text_edit.setMaximumWidth(
-            800
-        )  # Adjusted maximum width for better visibility
+        self.log_text_edit.setMinimumHeight(200)
+        self.log_text_edit.setMaximumWidth(800)
 
         self.reports_group_box = QGroupBox("Reports", self)
         self.reports_text_edit = QTextEdit(self.reports_group_box)
         self.reports_text_edit.setReadOnly(True)
-        self.reports_text_edit.setMinimumHeight(
-            200
-        )  # Adjusted minimum height for better visibility
-        self.reports_text_edit.setMaximumWidth(
-            800
-        )  # Adjusted maximum width for better visibility
+        self.reports_text_edit.setMinimumHeight(200)
+        self.reports_text_edit.setMaximumWidth(800)
 
         self.show_reports_button = QPushButton("Show Reports", self)
         self.show_reports_button.setFixedWidth(150)
+        self.show_reports_button.clicked.connect(self.show_reports)
+        self.show_reports_button.setStyleSheet(
+            f"background-color: {secondary_color.name()}; color: black;"
+        )
 
         self.footer_label = QLabel(
-            'Copyright © 2024 <a href="https://github.com/nicompiledev/apolo-11">@nicompiledev</a> and company. All rights reserved.<br>'
+            'Copyright © 2024 <a style="color: lightgray;" href="https://github.com/nicompiledev/apolo-11">@nicompiledev</a> and company. All rights reserved.<br>'
             "This project was funded by SoftServe through the #CodingUpMyFuture Python Bootcamp 2023.",
             self,
         )
@@ -615,6 +635,6 @@ if __name__ == "__main__":
     simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
 
-    app = QApplication(sys.argv)
+    app = QApplication([])
     dashboard = DashboardWindow(apollo_11_simulation)
-    sys.exit(app.exec_())
+    app.exec_()
