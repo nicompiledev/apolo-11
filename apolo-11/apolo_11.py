@@ -35,16 +35,14 @@ class Apollo11Simulation:
     Class representing the Apollo 11 simulation.
     """
 
-    def __init__(
-        self, simulation_folder: str, config_path: str = "config/config.yml"
-    ) -> None:
+    def __init__(self, config_path: str = "../config/config.yml") -> None:
         """
         Initialize the Apollo11Simulation object.
 
         Args:
             simulation_folder (str): Path to the simulation folder.
         """
-        self.simulation_folder = simulation_folder
+        self.simulation_folder = "data"
         self.missions: List[str] = ["ORBONE", "CLNM", "TMRS", "GALXONE", "UNKN"]
         self.device_types: List[str] = [
             "satellite",
@@ -73,8 +71,11 @@ class Apollo11Simulation:
             config_data.get("num_files_range", {}).get("max", 100),
         )
 
+        loggins_folder = os.path.join(self.simulation_folder, "loggins")
+        os.makedirs(loggins_folder, exist_ok=True)
+
         logging.basicConfig(
-            filename=os.path.join(simulation_folder, "simulation.log"),
+            filename=os.path.join(loggins_folder, "simulation.log"),
             level=logging.DEBUG,
             format="%(asctime)s - %(levelname)s - %(message)s",
         )
@@ -571,13 +572,13 @@ class DashboardWindow(QWidget):
             str: The contents of the log file.
         """
         log_file_path = os.path.join(
-            self.apollo_simulation.simulation_folder, "simulation.log"
+            self.apollo_simulation.simulation_folder, "loggins", "simulation.log"
         )
         try:
             with open(log_file_path, "r", encoding="utf-8") as log_file:
                 return log_file.read()
         except FileNotFoundError:
-            return "Log file not found."
+            return f"Log file not found at: {log_file_path}"
 
     def read_reports_files(self):
         """
@@ -632,8 +633,9 @@ class DashboardWindow(QWidget):
 
 
 if __name__ == "__main__":
-    simulation_path: str = "/home/atlanticsoft/my_repos/apolo-11"
-    apollo_11_simulation: Apollo11Simulation = Apollo11Simulation(simulation_path)
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    simulation_path: str = os.path.join(script_dir, "apolo-11")
+    apollo_11_simulation: Apollo11Simulation = Apollo11Simulation()
 
     app = QApplication([])
     dashboard = DashboardWindow(apollo_11_simulation)
