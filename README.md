@@ -34,7 +34,7 @@ simulation_path: str = "/path/to/your/simulation/folder"
 2. Run the simulation using:
 
 ```bash
-python your_script_name.py
+python apolo_11.py
 ```
 
 ## Class Overview
