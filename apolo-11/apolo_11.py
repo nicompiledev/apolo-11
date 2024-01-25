@@ -118,6 +118,9 @@ class Apollo11Simulation:
         if mission != "UNKN":
             data["hash"] = self.generate_hash(data)
 
+        with QMutexLocker(self.simulation_data_mutex):
+            self.simulation_data.append(data)
+
         return data
 
     def generate_hash(self, data: Dict[str, Union[str, int, None]]) -> int:
@@ -302,6 +305,9 @@ class Apollo11Simulation:
         files_report = pd.DataFrame(files_list)
         files_report.to_csv(self.generate_report_filename("file_list"), index=False)
 
+        with QMutexLocker(self.simulation_data_mutex):
+            files_list = self.simulation_data.copy()
+
     def generate_reports(self) -> None:
         """
         Generate all the required reports.
@@ -323,7 +329,9 @@ class Apollo11Simulation:
         """
         Move files to backup folder.
         """
-        backup_folder = os.path.join(self.simulation_folder, "backups")
+        backup_timestamp = datetime.now().strftime("%d%m%y%H%M%S")
+        backup_folder_name = f"backups/{backup_timestamp}"
+        backup_folder = os.path.join(self.simulation_folder, backup_folder_name)
         os.makedirs(backup_folder, exist_ok=True)
 
         devices_folder = os.path.join(self.simulation_folder, "devices")
@@ -345,7 +353,11 @@ class Apollo11Simulation:
 
         files_moved_count = len(files_before_move) - len(files_after_move)
 
-        logging.info("Moved %d files from 'devices' to 'backups'", files_moved_count)
+        logging.info(
+            "Moved %d files from 'devices' to 'backups/%s'",
+            files_moved_count,
+            backup_timestamp,
+        )
 
     def get_simulation_data_copy(self):
         """
@@ -519,9 +531,8 @@ class DashboardWindow(QWidget):
         self.apollo_simulation = apollo_simulation
 
         self.simulation_thread = SimulationThread(apollo_simulation)
-        self.simulation_thread.simulation_completed.connect(self.update_labels)
-        self.simulation_thread.finished.connect(self.simulation_finished)
-
+        self.simulation_thread.simulation_completed.connect(self.simulation_finished)
+        
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.start_simulation)
         self.timer.start(apollo_simulation.timesleep * 1000)
@@ -534,35 +545,24 @@ class DashboardWindow(QWidget):
         """
         Starts the simulation by initializing the simulation thread and updating the simulation label.
         """
-        print("Simulating...")
+        print("Initializing simulation...")
         self.label_simulation.setText("Generating files and reports...")
         self.simulation_thread.start()
 
-    def update_labels(self):
-        """
-        Updates the labels with the simulation data after the simulation is completed.
-        """
-        with QMutexLocker(self.mutex_for_labels):
-            simulation_data_copy = self.apollo_simulation.get_simulation_data_copy()
-
-            print(f"Files Generated: {len(simulation_data_copy)}")
-            print(
-                f"Reports Generated: {len(set(data['filename'] for data in simulation_data_copy))}"
-            )
-            print("Simulation completed")
-
     def simulation_finished(self):
         """
-        Performs actions after the simulation is finished, such as updating labels, displaying log records, and displaying reports.
+        Performs actions after the simulation is finished, such as displaying log records and reports.
         """
         print("Simulation finished")
-        self.update_labels()
 
         log_contents = self.read_log_file()
         self.log_text_edit.setPlainText(log_contents)
 
         reports_contents = self.read_reports_files()
         self.reports_text_edit.setPlainText(reports_contents)
+
+        backup_folder_name = datetime.now().strftime("%d%m%y%H%M%S")
+        print(f"Backup folder created: {backup_folder_name}")
 
     def read_log_file(self):
         """
