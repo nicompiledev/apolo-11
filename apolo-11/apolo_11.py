@@ -71,6 +71,8 @@ class Apollo11Simulation:
             config_data.get("num_files_range", {}).get("max", 100),
         )
 
+        self.date_format = config_data.get("date_format", "%d%m%y%H%M%S")
+
         loggins_folder = os.path.join(self.simulation_folder, "loggins")
         os.makedirs(loggins_folder, exist_ok=True)
 
@@ -101,10 +103,10 @@ class Apollo11Simulation:
         mission = random.choice(self.missions)
 
         data: Dict[str, Union[str, int, None]] = {
-            "date": datetime.now().strftime("%d%m%y%H%M%S"),
+            "date": current_timestamp,
             "mission": mission
             if mission != "UNKN"
-            else f"UNKNOWN-{datetime.now().strftime('%d%m%y%H%M%S')}",
+            else f"UNKNOWN-{datetime.now().strftime(self.date_format)}",
             "device_type": "unknown"
             if mission == "UNKN"
             else random.choice(self.device_types),
@@ -151,7 +153,7 @@ class Apollo11Simulation:
 
         return os.path.join(
             reports_folder,
-            f"APLSTATS-{report_type}-{datetime.now().strftime('%d%m%y%H%M%S')}.csv",
+            f"APLSTATS-{report_type}-{current_timestamp}.csv",
         )
 
     def simulate(self, num_files_range: Tuple[int, int] = (1, 100)) -> None:
@@ -298,7 +300,7 @@ class Apollo11Simulation:
                             self.simulation_folder, "devices", data["filename"]
                         )
                     )
-                ).strftime("%d%m%y%H%M%S"),
+                ).strftime(self.date_format),
             }
             files_list.append(file_info)
 
@@ -329,8 +331,8 @@ class Apollo11Simulation:
         """
         Move files to backup folder.
         """
-        backup_timestamp = datetime.now().strftime("%d%m%y%H%M%S")
-        backup_folder_name = f"backups/{backup_timestamp}"
+
+        backup_folder_name = f"backups/{current_timestamp}"
         backup_folder = os.path.join(self.simulation_folder, backup_folder_name)
         os.makedirs(backup_folder, exist_ok=True)
 
@@ -356,7 +358,7 @@ class Apollo11Simulation:
         logging.info(
             "Moved %d files from 'devices' to 'backups/%s'",
             files_moved_count,
-            backup_timestamp,
+            current_timestamp,
         )
 
     def get_simulation_data_copy(self):
@@ -532,7 +534,7 @@ class DashboardWindow(QWidget):
 
         self.simulation_thread = SimulationThread(apollo_simulation)
         self.simulation_thread.simulation_completed.connect(self.simulation_finished)
-        
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.start_simulation)
         self.timer.start(apollo_simulation.timesleep * 1000)
@@ -561,7 +563,7 @@ class DashboardWindow(QWidget):
         reports_contents = self.read_reports_files()
         self.reports_text_edit.setPlainText(reports_contents)
 
-        backup_folder_name = datetime.now().strftime("%d%m%y%H%M%S")
+        backup_folder_name = current_timestamp
         print(f"Backup folder created: {backup_folder_name}")
 
     def read_log_file(self):
@@ -636,6 +638,8 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.realpath(__file__))
     simulation_path: str = os.path.join(script_dir, "apolo-11")
     apollo_11_simulation: Apollo11Simulation = Apollo11Simulation()
+
+    current_timestamp = datetime.now().strftime(apollo_11_simulation.date_format)
 
     app = QApplication([])
     dashboard = DashboardWindow(apollo_11_simulation)
