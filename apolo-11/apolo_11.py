@@ -11,7 +11,8 @@ import time
 import shutil
 import logging
 import sys
-from PyQt5.QtGui import QDesktopServices, QColor
+from tabulate import tabulate
+from PyQt5.QtGui import QDesktopServices, QColor, QFont
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QMutex, QMutexLocker, QUrl, Qt
 from PyQt5.QtWidgets import (
     QApplication,
@@ -25,6 +26,10 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QPushButton,
     QFileDialog,
+    QDialog,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 import yaml
 import pandas as pd
@@ -210,9 +215,10 @@ class Apollo11Simulation:
                 total_files_to_generate_log,
             )
 
-            self.generate_file_list_report()
             self.generate_reports()
+            self.print_reports_table()
             self.move_files_to_backup()
+
             logging.info("Simulation completed successfully.")
 
         except (FileNotFoundError, PermissionError) as e:
@@ -371,6 +377,23 @@ class Apollo11Simulation:
         with QMutexLocker(self.simulation_data_mutex):
             return self.simulation_data.copy()
 
+    def print_reports_table(self):
+        """
+        Prints the reports in tabular format to the console.
+        """
+        reports_folder = os.path.join(self.simulation_folder, "reports")
+
+        try:
+            for file in os.listdir(reports_folder):
+                if "file_list" not in file:  # Skip file_list_report
+                    file_path = os.path.join(reports_folder, file)
+                    with open(file_path, "r", encoding="utf-8") as report_file:
+                        report_data = pd.read_csv(report_file)
+                        print(f"\n{file}:")
+                        print(tabulate(report_data, headers="keys", tablefmt="grid"))
+        except FileNotFoundError:
+            print("Reports folder not found.")
+
 
 class SimulationThread(QThread):
     """
@@ -415,6 +438,56 @@ class SimulationThread(QThread):
             num_files_range=self.apollo_simulation.num_files_range
         )
         self.simulation_completed.emit()
+
+
+class ReportsDialog(QDialog):
+    def __init__(self, report_data, parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        table = QTableWidget(self)
+        layout.addWidget(table)
+
+        headers = []
+        data = []
+
+        for file_path in report_data:
+            try:
+                df = pd.read_csv(file_path)
+                headers.append(file_path)
+                data.append(df)
+            except pd.errors.EmptyDataError:
+                pass  # Handle empty files
+
+        if data:
+            num_rows, num_cols = data[0].shape
+            table.setRowCount(num_rows)
+            table.setColumnCount(num_cols + 1)  # Add an extra column for the header
+
+            # Set headers
+            table.setHorizontalHeaderLabels(["Filename"] + list(data[0].columns))
+
+            # Populate data
+            for i, (header, df) in enumerate(zip(headers, data)):
+                table.setItem(i, 0, QTableWidgetItem(header))
+                for j in range(num_cols):
+                    table.setItem(i, j + 1, QTableWidgetItem(str(df.iloc[0, j])))
+
+            # Adjust column widths
+            for i in range(table.columnCount()):
+                table.resizeColumnToContents(i)
+
+            # Use monospace font
+            table.setFont(QFont("Monospace"))
+
+            # Set table formatting
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            table.horizontalHeader().setStretchLastSection(True)
+
+            # Hide vertical header
+            table.verticalHeader().setVisible(False)
+
+        self.setWindowTitle("Reports Viewer")
 
 
 class DashboardWindow(QWidget):
@@ -596,7 +669,15 @@ class DashboardWindow(QWidget):
 
         try:
             for file in os.listdir(reports_folder):
-                reports_contents += f"{os.path.basename(file)}\n"
+                file_path = os.path.join(reports_folder, file)
+                try:
+                    df = pd.read_csv(file_path)
+                    table = tabulate(
+                        df, headers="keys", tablefmt="grid", showindex=False
+                    )
+                    reports_contents += f"{file}:\n{table}\n\n"
+                except pd.errors.EmptyDataError:
+                    reports_contents += f"{file}:\n(empty file)\n\n"
         except FileNotFoundError:
             return "Reports folder not found."
 
@@ -609,6 +690,7 @@ class DashboardWindow(QWidget):
         reports_folder = os.path.join(
             self.apollo_simulation.simulation_folder, "reports"
         )
+
         options = QFileDialog.Options()
         options |= QFileDialog.ReadOnly
 
@@ -624,13 +706,8 @@ class DashboardWindow(QWidget):
         if file_dialog.exec_():
             selected_files = file_dialog.selectedFiles()
 
-            reports_contents = "\n".join(
-                os.path.basename(file) for file in selected_files
-            )
-
-            self.reports_text_edit.setPlainText(reports_contents)
-
             for file_path in selected_files:
+                # Open the file with the default program
                 QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
 
 
