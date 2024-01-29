@@ -8,6 +8,7 @@ import os
 import random
 from datetime import datetime
 import time
+import argparse
 import shutil
 import logging
 import sys
@@ -385,7 +386,7 @@ class Apollo11Simulation:
 
         try:
             for file in os.listdir(reports_folder):
-                if "file_list" not in file:  # Skip file_list_report
+                if "file_list" not in file:  
                     file_path = os.path.join(reports_folder, file)
                     with open(file_path, "r", encoding="utf-8") as report_file:
                         report_data = pd.read_csv(report_file)
@@ -438,56 +439,6 @@ class SimulationThread(QThread):
             num_files_range=self.apollo_simulation.num_files_range
         )
         self.simulation_completed.emit()
-
-
-class ReportsDialog(QDialog):
-    def __init__(self, report_data, parent=None):
-        super().__init__(parent)
-
-        layout = QVBoxLayout(self)
-        table = QTableWidget(self)
-        layout.addWidget(table)
-
-        headers = []
-        data = []
-
-        for file_path in report_data:
-            try:
-                df = pd.read_csv(file_path)
-                headers.append(file_path)
-                data.append(df)
-            except pd.errors.EmptyDataError:
-                pass  # Handle empty files
-
-        if data:
-            num_rows, num_cols = data[0].shape
-            table.setRowCount(num_rows)
-            table.setColumnCount(num_cols + 1)  # Add an extra column for the header
-
-            # Set headers
-            table.setHorizontalHeaderLabels(["Filename"] + list(data[0].columns))
-
-            # Populate data
-            for i, (header, df) in enumerate(zip(headers, data)):
-                table.setItem(i, 0, QTableWidgetItem(header))
-                for j in range(num_cols):
-                    table.setItem(i, j + 1, QTableWidgetItem(str(df.iloc[0, j])))
-
-            # Adjust column widths
-            for i in range(table.columnCount()):
-                table.resizeColumnToContents(i)
-
-            # Use monospace font
-            table.setFont(QFont("Monospace"))
-
-            # Set table formatting
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-            table.horizontalHeader().setStretchLastSection(True)
-
-            # Hide vertical header
-            table.verticalHeader().setVisible(False)
-
-        self.setWindowTitle("Reports Viewer")
 
 
 class DashboardWindow(QWidget):
@@ -669,15 +620,16 @@ class DashboardWindow(QWidget):
 
         try:
             for file in os.listdir(reports_folder):
-                file_path = os.path.join(reports_folder, file)
-                try:
-                    df = pd.read_csv(file_path)
-                    table = tabulate(
-                        df, headers="keys", tablefmt="grid", showindex=False
-                    )
-                    reports_contents += f"{file}:\n{table}\n\n"
-                except pd.errors.EmptyDataError:
-                    reports_contents += f"{file}:\n(empty file)\n\n"
+                if "file_list" not in file:  
+                    file_path = os.path.join(reports_folder, file)
+                    try:
+                        df = pd.read_csv(file_path)
+                        table = tabulate(
+                            df, headers="keys", tablefmt="grid", showindex=False
+                        )
+                        reports_contents += f"{file}:\n{table}\n\n"
+                    except pd.errors.EmptyDataError:
+                        reports_contents += f"{file}:\n(empty file)\n\n"
         except FileNotFoundError:
             return "Reports folder not found."
 
@@ -707,16 +659,73 @@ class DashboardWindow(QWidget):
             selected_files = file_dialog.selectedFiles()
 
             for file_path in selected_files:
-                # Open the file with the default program
+               
                 QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+
+
+def parse_arguments():
+    """
+    Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description="Apollo 11 Simulation Script")
+    parser.add_argument(
+        "--timesleep",
+        type=int,
+        help="Sleep time in seconds between simulation iterations",
+    )
+    parser.add_argument(
+        "--num_files_range_min",
+        type=int,
+        help="Minimum number of files in the range for simulation",
+    )
+    parser.add_argument(
+        "--num_files_range_max",
+        type=int,
+        help="Maximum number of files in the range for simulation",
+    )
+    parser.add_argument("--date_format", type=str, help="Date format string")
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.realpath(__file__))
     simulation_path: str = os.path.join(script_dir, "apolo-11")
-    apollo_11_simulation: Apollo11Simulation = Apollo11Simulation()
+
+
+    args = parse_arguments()
+
+   
+    apollo_11_simulation = Apollo11Simulation()
+
+    if args.timesleep:
+        apollo_11_simulation.timesleep = args.timesleep
+
+    if args.num_files_range_min or args.num_files_range_max:
+        min_value = (
+            args.num_files_range_min
+            if args.num_files_range_min
+            else apollo_11_simulation.num_files_range[0]
+        )
+        max_value = (
+            args.num_files_range_max
+            if args.num_files_range_max
+            else apollo_11_simulation.num_files_range[1]
+        )
+        apollo_11_simulation.num_files_range = (min_value, max_value)
+
+    if args.date_format:
+        apollo_11_simulation.date_format = args.date_format
 
     current_timestamp = datetime.now().strftime(apollo_11_simulation.date_format)
+
+    logging.info("Simulation configuration:")
+    logging.info(f"  - timesleep: {apollo_11_simulation.timesleep}")
+    logging.info(f"  - num_files_range: {apollo_11_simulation.num_files_range}")
+    logging.info(f"  - date_format: {apollo_11_simulation.date_format}")
 
     app = QApplication([])
     dashboard = DashboardWindow(apollo_11_simulation)
